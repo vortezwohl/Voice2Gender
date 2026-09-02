@@ -1,0 +1,45 @@
+from typing import Any, Mapping
+
+import numpy as np
+
+from voice2gender._model import booster, FEATURE_NAMES
+from voice2gender._preprocess import extract_features_from_pcm_sequence, Sequence, DEFAULT_SAMPLE_RATE
+
+
+def _predict(
+    features: Mapping[str, float],
+    include_features: bool = False
+) -> dict[str, Any | float]:
+    if not isinstance(features, Mapping):
+        raise TypeError("features 必须是映射")
+    missing = [name for name in FEATURE_NAMES if name not in features]
+    if missing:
+        raise ValueError(f"缺少模型特征: {missing}")
+    vector = np.asarray([features[name] for name in FEATURE_NAMES], dtype=np.float32)
+    if not np.isfinite(vector).all():
+        raise ValueError("模型特征包含 NaN 或无穷大")
+    female_probability = float(booster.predict_proba(vector.reshape(1, -1))[0, 1])
+    male_probability = 1.0 - female_probability
+    confidence = abs(female_probability - 0.5) * 2.0
+    result: dict[str, Any | float] = {
+        "male_probability": male_probability,
+        "female_probability": female_probability,
+        "confidence": confidence,
+    }
+    if include_features:
+        result["features"] = {name: float(features[name]) for name in FEATURE_NAMES}
+    return result
+
+
+def predict(
+    pcm_sequence: Sequence[bytes],
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    include_features: bool = False
+) -> dict[str, Any | float]:
+    return _predict(
+        extract_features_from_pcm_sequence(
+            pcm_sequence=pcm_sequence,
+            sample_rate=sample_rate
+        ),
+        include_features=include_features
+    )

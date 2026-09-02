@@ -69,7 +69,7 @@ def _frame_signal(
     frame_step: int,
     *,
     apply_window: bool = True,
-    pad_end: bool = True,
+    pad_end: bool = True
 ) -> np.ndarray:
     """Split a signal into frames with configurable windowing and end padding.
 
@@ -105,7 +105,7 @@ def _frame_signal(
 
 def _spectrum_features(
     samples: np.ndarray,
-    sample_rate: int,
+    sample_rate: int
 ) -> dict[str, float]:
     """Compute whole-signal spectral statistics following seewave::specprop.
 
@@ -198,7 +198,7 @@ def _spectrum_features(
 
 def _track_f0_and_dominant(
     samples: np.ndarray,
-    sample_rate: int,
+    sample_rate: int
 ) -> tuple[np.ndarray, np.ndarray]:
     """Extract F0 and dominant frequency using seewave::fund and seewave::dfreq frame definitions.
 
@@ -302,9 +302,9 @@ def _fundamental_features(f0_hz: np.ndarray) -> dict[str, float]:
     }
 
 
-def preprocess_pcm_sequence(
+def extract_features_from_pcm_sequence(
     pcm_sequence: Sequence[bytes],
-    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    sample_rate: int = DEFAULT_SAMPLE_RATE
 ) -> dict[str, float]:
     """Convert a PCM sequence into the 20 features required by XGBoost.
 
