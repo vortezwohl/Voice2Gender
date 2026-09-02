@@ -19,7 +19,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
 
-VERSION = 'v2'
+VERSION = 'v1'
 
 FEATURE_COLUMNS = (
     "meanfreq",
@@ -58,7 +58,7 @@ def read_inputs() -> tuple[Path, Path, float]:
     """
     project_root = Path(__file__).resolve().parents[1]
     default_data_path = project_root / "experiment" / "data" / "voice.csv"
-    default_output_dir = Path(__file__).resolve().with_suffix("") / "artifacts"
+    default_output_dir = Path("./train") / VERSION
 
     data_input = input("Enter training CSV path (press Enter for default): ").strip()
     output_input = input("Enter output directory (press Enter for default): ").strip()
@@ -365,11 +365,11 @@ def train_and_evaluate(
 def save_artifacts(
     model: XGBClassifier, metrics: dict[str, Any], output_dir: Path
 ) -> None:
-    """保存模型、评估指标和特征重要性。
+    """保存模型、评估指标、特征重要性和完整训练参数。
 
     Args:
         model: 已训练的 XGBoost 模型。
-        metrics: 测试集评估结果。
+        metrics: 测试集评估结果，其中包含数据切分配置和模型参数。
         output_dir: 输出目录，不存在时自动创建。
     """
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -378,6 +378,28 @@ def save_artifacts(
         json.dumps(metrics, ensure_ascii=False, indent=2, default=str),
         encoding="utf-8",
     )
+
+    model_parameters = model.get_params()
+    if isinstance(model_parameters.get("missing"), float) and np.isnan(
+        model_parameters["missing"]
+    ):
+        model_parameters["missing"] = None
+    training_parameters = {
+        "version": VERSION,
+        "model_parameters": model_parameters,
+        "data_split_parameters": {
+            "test_size": metrics["test_ratio"],
+            "random_state": metrics["random_state"],
+            "stratify": True,
+        },
+        "feature_columns": list(FEATURE_COLUMNS),
+        "label_mapping": LABEL_MAPPING,
+    }
+    (output_dir / "training_parameters.json").write_text(
+        json.dumps(training_parameters, ensure_ascii=True, indent=2, allow_nan=False),
+        encoding="utf-8",
+    )
+
     feature_importance = {
         feature: float(importance)
         for feature, importance in zip(FEATURE_COLUMNS, model.feature_importances_)
