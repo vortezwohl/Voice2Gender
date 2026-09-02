@@ -1,6 +1,7 @@
 from typing import Any, Mapping
 
 import numpy as np
+import xgboost
 
 from voice2gender._model import booster, FEATURE_NAMES
 from voice2gender._preprocess import (
@@ -21,7 +22,8 @@ def _predict(
     vector = np.asarray([features[name] for name in FEATURE_NAMES], dtype=np.float32)
     if not np.isfinite(vector).all():
         raise ValueError("Model features contain NaN or infinite values")
-    female_probability = float(booster.predict_proba(vector.reshape(1, -1))[0, 1])
+    prediction_matrix = xgboost.DMatrix(vector.reshape(1, -1), feature_names=FEATURE_NAMES)
+    female_probability = float(booster.predict(prediction_matrix)[0])
     male_probability = 1.0 - female_probability
     confidence = abs(female_probability - 0.5) * 2.0
     result: dict[str, Any | float] = {
