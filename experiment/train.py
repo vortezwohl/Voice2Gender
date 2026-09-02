@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
@@ -110,15 +111,194 @@ def build_model() -> XGBClassifier:
         配置固定、可复现实验结果的 XGBoost 分类器。
     """
     return XGBClassifier(
-        n_estimators=200,
-        max_depth=5,
-        learning_rate=0.1,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        random_state=42,
-        n_jobs=1,
-        tree_method="hist",
-        eval_metric="logloss",
+        # objective：定义训练任务和损失函数；二分类概率任务使用 binary:logistic。
+        # 取值：可选 XGBoost 内置目标函数，也可传自定义目标函数；二分类应选
+        # binary:logistic 或 binary:logitraw，多分类应选 multi:softprob/softmax。
+        # 选择逻辑：logistic 输出 0 到 1 的正类概率，适合本项目的性别二分类。
+        objective="binary:logistic",  # 当前值：二分类并输出 female 概率。
+        # base_score：所有样本的初始预测分数；二分类 Logistic 的默认概率为 0.5。
+        # 取值：通常为浮点数；二分类应在 0 到 1 之间，也可传多目标初始向量。
+        # 选择逻辑：平衡数据使用 0.5；若有可靠的类别先验可改为先验概率，但过度偏离
+        # 真实分布可能使前期训练变慢或引入偏置。
+        base_score=0.5,  # 当前值：XGBoost 3.4.1 的二分类默认初始概率。
+        # booster：选择基学习器；gbtree 使用树，dart 在树上随机丢弃部分树，gblinear
+        # 使用线性模型（XGBoost 3.4.1 已标记为逐步弃用）。
+        # 取值：gbtree、dart、gblinear。树模型适合非线性关系，线性模型更简单更快，
+        # dart 可降低过拟合但会增加随机性和调参复杂度。
+        booster="gbtree",  # 当前值：XGBoost 的默认树模型。
+        # callbacks：控制每轮训练结束时的自定义回调。
+        # 取值：None 或 TrainingCallback 对象列表，例如学习率调度和自定义
+        # early stopping。
+        # 选择逻辑：None 表示不启用额外回调；启用回调可增加控制能力，但回调对象不能
+        # 在多个训练任务之间直接复用。
+        callbacks=None,  # 当前值：不使用额外训练回调。
+        # colsample_bylevel：每棵树的每一层随机抽取的特征比例。
+        # 取值：大于 0 且不超过 1；1 使用全部特征，较小值增加随机性并降低过拟合。
+        # 选择逻辑：只有需要额外列采样时才降低；它会与其他 colsample 参数相乘。
+        colsample_bylevel=1.0,  # 当前值：使用每层的全部特征。
+        # colsample_bynode：每次节点切分时随机抽取的特征比例。
+        # 取值：大于 0 且不超过 1；减小可降低特征共适应，但可能丢失有效特征。
+        # 选择逻辑：当前特征只有 20 个，默认使用全部特征，避免过度随机化。
+        colsample_bynode=1.0,  # 当前值：使用每个节点的全部特征。
+        # colsample_bytree：构建每棵树时随机抽取的特征比例。
+        # 取值：大于 0 且不超过 1；较小值通常降低过拟合并增加树之间差异，
+        # 但过小会造成欠拟合。当前值与原训练脚本保持一致。
+        colsample_bytree=0.8,  # 当前值：每棵树使用 80% 的特征。
+        # device：指定训练和预测设备。
+        # 取值：cpu、cuda 或 gpu；cuda/gpu 需要可用的 CUDA 环境和 GPU 版本支持。
+        # 选择逻辑：CPU 适合当前小型数据集且依赖简单；GPU 适合更大数据，但会增加
+        # 环境要求，设备变化也可能带来轻微数值差异。
+        device="cpu",  # 当前值：使用 CPU。
+        # early_stopping_rounds：验证指标连续多少轮没有改善后停止训练。
+        # 取值：None 或非负整数；必须在 fit() 中传入 eval_set 才能真正工作。
+        # 选择逻辑：None 表示固定执行 n_estimators 轮；启用后通常能降低过拟合和训练
+        # 时间，但模型轮数会依赖验证集，结果不再只由 n_estimators 决定。
+        early_stopping_rounds=None,  # 当前值：不提前停止。
+        # enable_categorical：是否启用 pandas categorical 等类别特征支持。
+        # 取值：True 或 False；True 只在输入含类别特征且数据类型正确时发挥作用。
+        # 选择逻辑：当前 20 列均为连续数值，True 与 False 对当前训练结果没有实质影响；
+        # 保持 XGBoost 3.4.1 sklearn API 的默认值。
+        enable_categorical=True,  # 当前值：允许类别特征。
+        # eval_metric：训练期间监控的评估指标，不会替换 objective。
+        # 取值：内置指标名称、名称列表或自定义 callable；二分类常见有 logloss、error、
+        # auc、aucpr。logloss/错误率越低越好，AUC/AUCPR 越高越好。
+        # 选择逻辑：当前使用 logloss，与 binary:logistic 的概率输出匹配；类别极不平衡时
+        # 可额外关注 aucpr，但必须同步调整验证和选择标准。
+        eval_metric="logloss",  # 当前值：监控对数损失。
+        # feature_types：显式声明每个输入特征的类型。
+        # 取值：None 或与特征列一一对应的类型序列；常见类型为 int、float、bool、c、
+        # q 等。长度或类型错误会导致训练失败。
+        # 选择逻辑：None 让 XGBoost 从 pandas 数据自动推断；当前数据已是数值列，
+        # 无需重复声明。
+        feature_types=None,  # 当前值：由输入数据自动推断。
+        # feature_weights：列采样时各特征被选中的相对权重。
+        # 取值：None 或长度等于特征数的正数数组；权重越大，被采样概率越高。
+        # 选择逻辑：没有可靠的特征先验时使用 None；人为提高某些特征权重可能造成偏置。
+        feature_weights=None,  # 当前值：不调整特征采样权重。
+        # gamma：节点继续分裂所需的最小损失下降，也叫 min_split_loss。
+        # 取值：大于等于 0；0 允许默认分裂，增大后分裂更谨慎、树更简单。
+        # 选择逻辑：验证集出现过拟合时可逐步增大；过大可能阻止有效切分并欠拟合。
+        gamma=0.0,  # 当前值：XGBoost 默认不额外要求损失下降。
+        # grow_policy：树节点的生长顺序。
+        # 取值：depthwise 优先扩展较浅层节点；lossguide 优先扩展损失下降最大的节点。
+        # 选择逻辑：depthwise 是默认且与 max_depth 直观配合；lossguide 适合用 max_leaves
+        # 控制复杂度，但会增加调参空间。
+        grow_policy="depthwise",  # 当前值：按深度生长。
+        # importance_type：feature_importances_ 属性使用的特征重要性口径。
+        # 取值：树模型可选 weight、gain、cover、total_gain、total_cover；None 表示
+        # sklearn 包装器按模型类型采用默认口径，树模型默认实际使用 gain。
+        # 选择逻辑：gain 更关注损失改善，weight 更关注使用次数，cover 更关注覆盖样本；
+        # 不同口径不能直接当作同一种重要性解释。
+        importance_type=None,  # 当前值：使用树模型默认的 gain。
+        # interaction_constraints：限制允许发生交互的特征组。
+        # 取值：None，或表示特征索引/名称分组的嵌套列表或字符串；None 不限制交互。
+        # 选择逻辑：只有存在明确业务先验或需要抑制不合理交互时才设置；限制过强会欠拟合。
+        interaction_constraints=None,  # 当前值：不限制特征交互。
+        # learning_rate：每轮新增树对最终模型的贡献，也叫 eta。
+        # 取值：大于 0；较小值通常需要更大的 n_estimators，较大值训练更快但更易过拟合。
+        # 选择逻辑：当前 0.1 是中等保守值；降低它时应同步增加训练轮数并用验证集选择。
+        learning_rate=0.1,  # 当前值：每棵树使用 10% 的更新步长。
+        # max_bin：hist 算法对连续特征分箱的最大箱数。
+        # 取值：正整数；增大可提高阈值近似精度，但增加内存和计算成本。
+        # 选择逻辑：当前特征和数据集较小，默认 256 已足够；数据量大或阈值精度不足时
+        # 再调高。
+        max_bin=256,  # 当前值：XGBoost hist 默认箱数。
+        # max_cat_threshold：类别特征分区切分时最多考虑的类别数。
+        # 取值：正整数；只影响类别特征。增大可能提高类别切分质量，但增加计算量和
+        # 过拟合风险。
+        # 选择逻辑：当前没有类别特征，因此保持默认 64，不影响本模型。
+        max_cat_threshold=64,  # 当前值：XGBoost 类别切分默认上限。
+        # max_cat_to_onehot：类别数低于该阈值时使用 one-hot 风格切分。
+        # 取值：正整数；阈值越大，更多低基数类别会采用 one-hot，可能更细致但更复杂。
+        # 选择逻辑：当前没有类别特征，因此保持默认 4。
+        max_cat_to_onehot=4,  # 当前值：XGBoost 类别 one-hot 默认阈值。
+        # max_delta_step：限制每棵树叶子权重估计的最大更新步长。
+        # 取值：大于等于 0；0 表示不限制，较大值使更新更保守。
+        # 选择逻辑：严重类别不平衡时可尝试增大；当前数据男女各半，保持 0。
+        max_delta_step=0.0,  # 当前值：不限制叶子权重更新步长。
+        # max_depth：单棵树允许的最大深度。
+        # 取值：非负整数；0 表示不以深度限制，数值越大表达能力越强但越易过拟合。
+        # 选择逻辑：当前 5 与原训练脚本一致；验证集过拟合时降低，欠拟合时谨慎增大。
+        max_depth=5,  # 当前值：最大深度为 5。
+        # max_leaves：单棵树允许的最大叶子数。
+        # 取值：非负整数；0 表示不限制。通常与 lossguide 配合，用叶子数直接控制复杂度。
+        # 选择逻辑：当前使用 depthwise，因此保持默认 0；若改用 lossguide，应同时调节
+        # 该值。
+        max_leaves=0,  # 当前值：不额外限制叶子数。
+        # min_child_weight：子节点继续存在所需的最小实例权重总和。
+        # 取值：大于等于 0；增大后更难创建小叶子，可抑制过拟合，但过大可能欠拟合。
+        # 选择逻辑：当前使用默认 1；验证集噪声较大时可增大，模型过于保守时可减小。
+        min_child_weight=1.0,  # 当前值：XGBoost 默认子节点权重下限。
+        # missing：输入数据中应被当作缺失值的数值。
+        # 取值：通常为 numpy.nan，也可指定某个特殊数值；当前 load_dataset 会先拒绝
+        # 缺失值。
+        # 选择逻辑：使用 numpy.nan 可保留 XGBoost 原生缺失值语义；指定特殊数值前必须确认
+        # 该数值不会与合法特征值混淆。
+        missing=np.nan,  # 当前值：使用 NaN 表示缺失。
+        # monotone_constraints：限制特征与预测之间的单调关系。
+        # 取值：None，或按特征名/索引指定 -1、0、1；-1 表示递减，0 不限制，1 表示递增。
+        # 选择逻辑：只有业务上能证明单调关系时才使用；错误约束会直接损害模型表现。
+        monotone_constraints=None,  # 当前值：不施加单调约束。
+        # multi_strategy：多目标/多输出任务的树构建策略。
+        # 取值：one_output_per_tree 为每个输出分别建树；multi_output_tree 共享多输出树。
+        # 选择逻辑：当前是单目标二分类，使用默认 one_output_per_tree；多输出任务才需要
+        # 比较。
+        multi_strategy="one_output_per_tree",  # 当前值：每棵树处理一个输出。
+        # n_estimators：boosting 轮数，也就是树的数量。
+        # 取值：正整数；增大提高拟合能力和训练成本，也增加过拟合风险，通常与较小
+        # learning_rate 配合。当前 200 与原训练脚本一致。
+        n_estimators=200,  # 当前值：训练 200 轮。
+        # n_jobs：CPU 并行线程数。
+        # 取值：None、0 或正整数；0/None 通常交给 XGBoost 使用可用线程，固定正整数
+        # 限制线程。
+        # 选择逻辑：当前显式使用 1 以避免线程竞争、控制资源并尽量提高复现性；更大值可能
+        # 更快，但会占用更多 CPU。
+        n_jobs=1,  # 当前值：单线程训练。
+        # num_parallel_tree：每个 boosting 轮次并行构建的树数。
+        # 取值：正整数；1 是普通 boosting，增大可形成随机森林式并行树组但增加计算量。
+        # 选择逻辑：当前模型使用普通单树 boosting，保持默认 1。
+        num_parallel_tree=1,  # 当前值：每轮 1 棵树。
+        # random_state：随机数种子。
+        # 取值：None、整数或 NumPy 随机数生成器；固定整数提高同一环境中的结果复现性。
+        # 选择逻辑：当前固定为 42，与数据切分和原训练配置一致；跨版本或硬件仍不保证
+        # 逐位一致。
+        random_state=42,  # 当前值：固定随机种子 42。
+        # reg_alpha：叶子权重的 L1 正则化强度。
+        # 取值：大于等于 0；增大后模型更稀疏、更保守，但过大可能欠拟合。
+        # 选择逻辑：默认 0 表示不额外添加 L1；特征冗余或过拟合时可从小值开始搜索。
+        reg_alpha=0.0,  # 当前值：不使用额外 L1 正则化。
+        # reg_lambda：叶子权重的 L2 正则化强度，也叫 lambda。
+        # 取值：大于等于 0；增大通常提高稳定性并抑制过拟合，过大可能欠拟合。
+        # 选择逻辑：保持 XGBoost 默认 1；噪声较大时可增大，模型过保守时可减小。
+        reg_lambda=1.0,  # 当前值：XGBoost 默认 L2 正则化。
+        # sampling_method：样本采样方式。
+        # 取值：uniform 均匀采样；gradient_based 按梯度/Hessian 重要性采样，主要用于 GPU
+        # hist。CPU hist 使用 gradient_based 可能不受支持或退化为不适用配置。
+        # 选择逻辑：当前使用 CPU 和 subsample=0.8，因此选择 uniform。
+        sampling_method="uniform",  # 当前值：均匀样本采样。
+        # scale_pos_weight：正类相对于负类的权重。
+        # 取值：大于 0；常见起点是负类数量除以正类数量。增大可提高少数正类的关注，
+        # 但会改变概率校准并可能提高误报。
+        # 选择逻辑：当前 male/female 数量相等，使用 1 不改变类别权重。
+        scale_pos_weight=1.0,  # 当前值：正负类等权。
+        # subsample：每轮训练随机抽取的样本比例。
+        # 取值：大于 0 且不超过 1；减小可降低过拟合并增加树间差异，但过小会欠拟合。
+        # 选择逻辑：当前 0.8 与原训练脚本一致；数据少时不宜设置过低。
+        subsample=0.8,  # 当前值：每轮使用 80% 的样本。
+        # tree_method：树的构建算法。
+        # 取值：auto、exact、approx、hist；GPU 训练通常配合 device=cuda 和 hist。
+        # 选择逻辑：hist 速度快、内存相对低，适合当前数据；exact 更精确但通常更慢，
+        # auto 让 XGBoost 自行选择，可能随版本或环境变化。
+        tree_method="hist",  # 当前值：直方图算法。
+        # validate_parameters：是否对未知或无效参数进行校验并发出警告。
+        # 取值：True 或 False；True 更容易发现拼写错误，False 可能隐藏配置问题。
+        # 选择逻辑：训练配置显式化后使用 True，优先暴露错误；不会替代参数本身的合法性
+        # 检查。
+        validate_parameters=True,  # 当前值：启用参数校验。
+        # verbosity：XGBoost 日志详细程度。
+        # 取值：0 到 3；0 静默，1 警告，2 信息，3 调试。日志越详细，诊断信息越多。
+        # 选择逻辑：使用 XGBoost 默认 1，保留重要警告而不输出调试噪音。
+        verbosity=1,  # 当前值：警告级别日志。
     )
 
 
