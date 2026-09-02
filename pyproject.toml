@@ -14,4 +14,5 @@ dependencies = [
 dev = [
     "pandas",
     "scikit-learn",
+    "ruff",
 ]

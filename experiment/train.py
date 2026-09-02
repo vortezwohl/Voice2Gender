@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 from pathlib import Path
 from typing import Any
@@ -47,33 +46,27 @@ FEATURE_COLUMNS = (
 LABEL_MAPPING = {"male": 0, "female": 1}
 
 
-def parse_args() -> argparse.Namespace:
-    """解析训练脚本的命令行参数。
+def read_inputs() -> tuple[Path, Path, float]:
+    """通过标准输入读取训练参数。
 
     Returns:
-        包含数据路径、输出目录和测试集比例的命名空间。
+        数据集路径、输出目录和测试集比例。
+
+    Raises:
+        ValueError: 测试集比例无法转换为浮点数时抛出。
     """
     project_root = Path(__file__).resolve().parents[1]
-    parser = argparse.ArgumentParser(description="训练 Voice Gender XGBoost 分类器")
-    parser.add_argument(
-        "--data",
-        type=Path,
-        default=project_root / "experiment" / "data" / "voice.csv",
-        help="Voice Gender CSV 文件路径",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path(__file__).resolve().with_suffix("") / "artifacts",
-        help="模型和评估结果输出目录",
-    )
-    parser.add_argument(
-        "--test-size",
-        type=float,
-        default=0.2,
-        help="测试集比例，默认使用公开 Notebook 的 0.2",
-    )
-    return parser.parse_args()
+    default_data_path = project_root / "experiment" / "data" / "voice.csv"
+    default_output_dir = Path(__file__).resolve().with_suffix("") / "artifacts"
+
+    data_input = input("Enter training CSV path (press Enter for default): ").strip()
+    output_input = input("Enter output directory (press Enter for default): ").strip()
+    test_input = input("Enter test set ratio (press Enter for 0.2): ").strip()
+
+    data_path = Path(data_input) if data_input else default_data_path
+    output_dir = Path(output_input) if output_input else default_output_dir
+    test_size = float(test_input) if test_input else 0.2
+    return data_path, output_dir, test_size
 
 
 def load_dataset(data_path: Path) -> tuple[pd.DataFrame, pd.Series]:
@@ -86,26 +79,27 @@ def load_dataset(data_path: Path) -> tuple[pd.DataFrame, pd.Series]:
         特征数据框和编码为 0/1 的标签序列。
 
     Raises:
-        FileNotFoundError: 数据文件不存在。
-        ValueError: 缺少列、标签非法或数值特征包含非有限值。
+        FileNotFoundError: The dataset file does not exist.
+        ValueError: Required columns are missing, labels are invalid, or numeric
+            features contain non-finite values.
     """
     if not data_path.is_file():
-        raise FileNotFoundError(f"数据文件不存在: {data_path}")
+        raise FileNotFoundError(f"Dataset file does not exist: {data_path}")
 
     data = pd.read_csv(data_path)
     required_columns = set(FEATURE_COLUMNS) | {"label"}
     missing_columns = sorted(required_columns - set(data.columns))
     if missing_columns:
-        raise ValueError(f"CSV 缺少必要列: {missing_columns}")
+        raise ValueError(f"CSV is missing required columns: {missing_columns}")
 
     features = data.loc[:, FEATURE_COLUMNS].apply(pd.to_numeric, errors="coerce")
     if not features.notna().all().all():
-        raise ValueError("声学特征包含空值或非数值内容")
+        raise ValueError("Acoustic features contain null or non-numeric values")
 
     labels = data["label"].astype(str).str.strip().str.casefold()
     unknown_labels = sorted(set(labels) - set(LABEL_MAPPING))
     if unknown_labels:
-        raise ValueError(f"label 包含不支持的取值: {unknown_labels}")
+        raise ValueError(f"Label contains unsupported values: {unknown_labels}")
     return features, labels.map(LABEL_MAPPING).astype("int8")
 
 
@@ -144,10 +138,10 @@ def train_and_evaluate(
         训练完成的模型和可 JSON 序列化的评估结果。
 
     Raises:
-        ValueError: 测试集比例不在合理范围内。
+        ValueError: The test set ratio is outside the valid range.
     """
     if not 0 < test_size < 1:
-        raise ValueError("test_size 必须在 0 和 1 之间")
+        raise ValueError("test_size must be between 0 and 1")
 
     x_train, x_test, y_train, y_test = train_test_split(
         features,
@@ -215,16 +209,15 @@ def save_artifacts(
 
 
 def main() -> None:
-    """执行数据加载、XGBoost 训练、评估和产物保存。"""
-    args = parse_args()
-    features, labels = load_dataset(args.data)
-    model, metrics = train_and_evaluate(features, labels, args.test_size)
-    save_artifacts(model, metrics, args.output_dir)
+    data_path, output_dir, test_size = read_inputs()
+    features, labels = load_dataset(data_path)
+    model, metrics = train_and_evaluate(features, labels, test_size)
+    save_artifacts(model, metrics, output_dir)
 
-    print(f"测试集准确率: {metrics['accuracy']:.6f}")
-    print("混淆矩阵（行=真实，列=预测；顺序 male/female）:")
+    print(f"Test accuracy: {metrics['accuracy']:.6f}")
+    print("Confusion matrix (rows=true, columns=predicted; order=male/female):")
     print(metrics["confusion_matrix"])
-    print(f"模型已保存: {args.output_dir / f'voice_gender_xgboost_{VERSION}.json'}")
+    print(f"Model saved to: {output_dir / 'voice_gender_xgboost.json'}")
 
 
 if __name__ == "__main__":
