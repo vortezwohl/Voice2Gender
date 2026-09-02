@@ -1,6 +1,29 @@
 import json
 from xgboost import Booster
 
+FEATURE_NAMES = [
+    "meanfreq",
+    "sd",
+    "median",
+    "Q25",
+    "Q75",
+    "IQR",
+    "skew",
+    "kurt",
+    "sp.ent",
+    "sfm",
+    "mode",
+    "centroid",
+    "meanfun",
+    "minfun",
+    "maxfun",
+    "meandom",
+    "mindom",
+    "maxdom",
+    "dfrange",
+    "modindx",
+]
+
 booster = Booster()
 booster.load_model(
     bytearray(
@@ -8,28 +31,7 @@ booster.load_model(
             {
                 "learner": {
                     "attributes": {"scikit_learn": '{"_estimator_type": "classifier"}'},
-                    "feature_names": [
-                        "meanfreq",
-                        "sd",
-                        "median",
-                        "Q25",
-                        "Q75",
-                        "IQR",
-                        "skew",
-                        "kurt",
-                        "sp.ent",
-                        "sfm",
-                        "mode",
-                        "centroid",
-                        "meanfun",
-                        "minfun",
-                        "maxfun",
-                        "meandom",
-                        "mindom",
-                        "maxdom",
-                        "dfrange",
-                        "modindx",
-                    ],
+                    "feature_names": FEATURE_NAMES,
                     "feature_types": [
                         "float",
                         "float",
