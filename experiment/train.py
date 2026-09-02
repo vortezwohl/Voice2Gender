@@ -19,7 +19,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
 
-VERSION = 'v1'
+VERSION = 'v2'
 
 FEATURE_COLUMNS = (
     "meanfreq",
@@ -143,7 +143,7 @@ def build_model() -> XGBClassifier:
         # colsample_bytree：构建每棵树时随机抽取的特征比例。
         # 取值：大于 0 且不超过 1；较小值通常降低过拟合并增加树之间差异，
         # 但过小会造成欠拟合。当前值与原训练脚本保持一致。
-        colsample_bytree=0.8,  # 当前值：每棵树使用 80% 的特征。
+        colsample_bytree=0.9,  # 当前值：每棵树使用 80% 的特征。
         # device：指定训练和预测设备。
         # 取值：cpu、cuda 或 gpu；cuda/gpu 需要可用的 CUDA 环境和 GPU 版本支持。
         # 选择逻辑：CPU 适合当前小型数据集且依赖简单；GPU 适合更大数据，但会增加
@@ -183,7 +183,7 @@ def build_model() -> XGBClassifier:
         # 取值：depthwise 优先扩展较浅层节点；lossguide 优先扩展损失下降最大的节点。
         # 选择逻辑：depthwise 是默认且与 max_depth 直观配合；lossguide 适合用 max_leaves
         # 控制复杂度，但会增加调参空间。
-        grow_policy="depthwise",  # 当前值：按深度生长。
+        grow_policy="lossguide",  # 当前值：按深度生长。
         # importance_type：feature_importances_ 属性使用的特征重要性口径。
         # 取值：树模型可选 weight、gain、cover、total_gain、total_cover；None 表示
         # sklearn 包装器按模型类型采用默认口径，树模型默认实际使用 gain。
@@ -197,7 +197,7 @@ def build_model() -> XGBClassifier:
         # learning_rate：每轮新增树对最终模型的贡献，也叫 eta。
         # 取值：大于 0；较小值通常需要更大的 n_estimators，较大值训练更快但更易过拟合。
         # 选择逻辑：当前 0.1 是中等保守值；降低它时应同步增加训练轮数并用验证集选择。
-        learning_rate=0.05,  # 当前值：每棵树使用 10% 的更新步长。
+        learning_rate=0.06,  # 当前值：每棵树使用 10% 的更新步长。
         # max_bin：hist 算法对连续特征分箱的最大箱数。
         # 取值：正整数；增大可提高阈值近似精度，但增加内存和计算成本。
         # 选择逻辑：当前特征和数据集较小，默认 256 已足够；数据量大或阈值精度不足时
@@ -219,12 +219,12 @@ def build_model() -> XGBClassifier:
         # max_depth：单棵树允许的最大深度。
         # 取值：非负整数；0 表示不以深度限制，数值越大表达能力越强但越易过拟合。
         # 选择逻辑：当前 5 与原训练脚本一致；验证集过拟合时降低，欠拟合时谨慎增大。
-        max_depth=7,  # 当前值：最大深度为 5。
+        max_depth=0,  # 当前值：最大深度为 5。
         # max_leaves：单棵树允许的最大叶子数。
         # 取值：非负整数；0 表示不限制。通常与 lossguide 配合，用叶子数直接控制复杂度。
         # 选择逻辑：当前使用 depthwise，因此保持默认 0；若改用 lossguide，应同时调节
         # 该值。
-        max_leaves=0,  # 当前值：不额外限制叶子数。
+        max_leaves=8,  # 当前值：不额外限制叶子数。
         # min_child_weight：子节点继续存在所需的最小实例权重总和。
         # 取值：大于等于 0；增大后更难创建小叶子，可抑制过拟合，但过大可能欠拟合。
         # 选择逻辑：当前使用默认 1；验证集噪声较大时可增大，模型过于保守时可减小。
@@ -247,17 +247,17 @@ def build_model() -> XGBClassifier:
         # n_estimators：boosting 轮数，也就是树的数量。
         # 取值：正整数；增大提高拟合能力和训练成本，也增加过拟合风险，通常与较小
         # learning_rate 配合。当前 200 与原训练脚本一致。
-        n_estimators=256,  # 当前值：训练 200 轮。
+        n_estimators=250,  # 当前值：训练 200 轮。
         # n_jobs：CPU 并行线程数。
         # 取值：None、0 或正整数；0/None 通常交给 XGBoost 使用可用线程，固定正整数
         # 限制线程。
         # 选择逻辑：当前显式使用 1 以避免线程竞争、控制资源并尽量提高复现性；更大值可能
         # 更快，但会占用更多 CPU。
-        n_jobs=8,  # 当前值：单线程训练。
+        n_jobs=1,  # 当前值：单线程训练。
         # num_parallel_tree：每个 boosting 轮次并行构建的树数。
         # 取值：正整数；1 是普通 boosting，增大可形成随机森林式并行树组但增加计算量。
         # 选择逻辑：当前模型使用普通单树 boosting，保持默认 1。
-        num_parallel_tree=3,  # 当前值：每轮 1 棵树。
+        num_parallel_tree=1,  # 当前值：每轮 1 棵树。
         # random_state：随机数种子。
         # 取值：None、整数或 NumPy 随机数生成器；固定整数提高同一环境中的结果复现性。
         # 选择逻辑：当前固定为 42，与数据切分和原训练配置一致；跨版本或硬件仍不保证
@@ -284,12 +284,12 @@ def build_model() -> XGBClassifier:
         # subsample：每轮训练随机抽取的样本比例。
         # 取值：大于 0 且不超过 1；减小可降低过拟合并增加树间差异，但过小会欠拟合。
         # 选择逻辑：当前 0.8 与原训练脚本一致；数据少时不宜设置过低。
-        subsample=0.8,  # 当前值：每轮使用 80% 的样本。
+        subsample=0.9,  # 当前值：每轮使用 80% 的样本。
         # tree_method：树的构建算法。
         # 取值：auto、exact、approx、hist；GPU 训练通常配合 device=cuda 和 hist。
         # 选择逻辑：hist 速度快、内存相对低，适合当前数据；exact 更精确但通常更慢，
         # auto 让 XGBoost 自行选择，可能随版本或环境变化。
-        tree_method="exact",  # 当前值：直方图算法。
+        tree_method="hist",  # 当前值：直方图算法。
         # validate_parameters：是否对未知或无效参数进行校验并发出警告。
         # 取值：True 或 False；True 更容易发现拼写错误，False 可能隐藏配置问题。
         # 选择逻辑：训练配置显式化后使用 True，优先暴露错误；不会替代参数本身的合法性
@@ -298,7 +298,7 @@ def build_model() -> XGBClassifier:
         # verbosity：XGBoost 日志详细程度。
         # 取值：0 到 3；0 静默，1 警告，2 信息，3 调试。日志越详细，诊断信息越多。
         # 选择逻辑：使用 XGBoost 默认 1，保留重要警告而不输出调试噪音。
-        verbosity=3,  # 当前值：警告级别日志。
+        verbosity=0,  # 当前值：警告级别日志。
     )
 
 

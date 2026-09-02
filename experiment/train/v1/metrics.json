@@ -1,0 +1,117 @@
+{
+  "dataset_size": 3168,
+  "train_size": 2534,
+  "test_size": 634,
+  "test_ratio": 0.2,
+  "random_state": 42,
+  "accuracy": 0.9779179810725552,
+  "classification_report": {
+    "male": {
+      "precision": 0.9871382636655949,
+      "recall": 0.9684542586750788,
+      "f1-score": 0.9777070063694268,
+      "support": 317.0
+    },
+    "female": {
+      "precision": 0.9690402476780186,
+      "recall": 0.9873817034700315,
+      "f1-score": 0.978125,
+      "support": 317.0
+    },
+    "accuracy": 0.9779179810725552,
+    "macro avg": {
+      "precision": 0.9780892556718067,
+      "recall": 0.9779179810725551,
+      "f1-score": 0.9779160031847134,
+      "support": 634.0
+    },
+    "weighted avg": {
+      "precision": 0.9780892556718067,
+      "recall": 0.9779179810725552,
+      "f1-score": 0.9779160031847133,
+      "support": 634.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      307,
+      10
+    ],
+    [
+      4,
+      313
+    ]
+  ],
+  "probability_range": [
+    0.00010793637920869514,
+    0.9998443126678467
+  ],
+  "feature_columns": [
+    "meanfreq",
+    "sd",
+    "median",
+    "Q25",
+    "Q75",
+    "IQR",
+    "skew",
+    "kurt",
+    "sp.ent",
+    "sfm",
+    "mode",
+    "centroid",
+    "meanfun",
+    "minfun",
+    "maxfun",
+    "meandom",
+    "mindom",
+    "maxdom",
+    "dfrange",
+    "modindx"
+  ],
+  "label_mapping": {
+    "male": 0,
+    "female": 1
+  },
+  "model_parameters": {
+    "objective": "binary:logistic",
+    "base_score": 0.5,
+    "booster": "gbtree",
+    "callbacks": null,
+    "colsample_bylevel": 1.0,
+    "colsample_bynode": 1.0,
+    "colsample_bytree": 0.8,
+    "device": "cpu",
+    "early_stopping_rounds": null,
+    "enable_categorical": true,
+    "eval_metric": "logloss",
+    "feature_types": null,
+    "feature_weights": null,
+    "gamma": 0.0,
+    "grow_policy": "depthwise",
+    "importance_type": null,
+    "interaction_constraints": null,
+    "learning_rate": 0.05,
+    "max_bin": 256,
+    "max_cat_threshold": 64,
+    "max_cat_to_onehot": 4,
+    "max_delta_step": 0.0,
+    "max_depth": 7,
+    "max_leaves": 0,
+    "min_child_weight": 1.0,
+    "missing": NaN,
+    "monotone_constraints": null,
+    "multi_strategy": "one_output_per_tree",
+    "n_estimators": 256,
+    "n_jobs": 8,
+    "num_parallel_tree": 3,
+    "random_state": 42,
+    "reg_alpha": 0.0,
+    "reg_lambda": 1.0,
+    "sampling_method": "uniform",
+    "scale_pos_weight": 1.0,
+    "subsample": 0.8,
+    "tree_method": "exact",
+    "validate_parameters": true,
+    "verbosity": 3
+  }
+}
