@@ -8,7 +8,7 @@ import numpy as np
 
 from voice2gender._model import FEATURE_NAMES
 
-DEFAULT_SAMPLE_RATE = 44_100
+SAMPLE_RATE = 44_100
 TRACK_FRAME_LENGTH = 2_048
 F0_FRAME_STEP = TRACK_FRAME_LENGTH // 2
 DOMINANT_FRAME_STEP = TRACK_FRAME_LENGTH
@@ -39,9 +39,9 @@ def _decode_pcm_sequence(pcm_sequence: Sequence[bytes], sample_rate: int) -> np.
         pcm_sequence, Sequence
     ):
         raise TypeError("pcm_sequence must be an ordered sequence of bytes")
-    if sample_rate != DEFAULT_SAMPLE_RATE:
+    if sample_rate != SAMPLE_RATE:
         raise ValueError(
-            f"This model supports {DEFAULT_SAMPLE_RATE} Hz PCM, got {sample_rate} Hz"
+            f"This model supports {SAMPLE_RATE} Hz PCM, got {sample_rate} Hz"
         )
     if not pcm_sequence:
         raise ValueError("pcm_sequence cannot be empty")
@@ -304,7 +304,7 @@ def _fundamental_features(f0_hz: np.ndarray) -> dict[str, float]:
 
 def extract_features_from_pcm_sequence(
     pcm_sequence: Sequence[bytes],
-    sample_rate: int = DEFAULT_SAMPLE_RATE
+    sample_rate: int = SAMPLE_RATE
 ) -> dict[str, float]:
     """Convert a PCM sequence into the 20 features required by XGBoost.
 

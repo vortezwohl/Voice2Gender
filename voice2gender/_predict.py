@@ -3,7 +3,7 @@ from typing import Any, Mapping
 import numpy as np
 
 from voice2gender._model import booster, FEATURE_NAMES
-from voice2gender._preprocess import extract_features_from_pcm_sequence, Sequence, DEFAULT_SAMPLE_RATE
+from voice2gender._preprocess import extract_features_from_pcm_sequence, Sequence, SAMPLE_RATE
 
 
 def _predict(
@@ -33,7 +33,7 @@ def _predict(
 
 def predict(
     pcm_sequence: Sequence[bytes],
-    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    sample_rate: int = SAMPLE_RATE,
     include_features: bool = False
 ) -> dict[str, Any | float]:
     return _predict(
