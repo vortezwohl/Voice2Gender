@@ -7,7 +7,7 @@
 *Extract 20 acoustic features and run a bundled XGBoost model with one Python call.*
 
 <p>
-  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.13%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.13+" /></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+" /></a>
   <a href="https://xgboost.readthedocs.io/"><img src="https://img.shields.io/badge/XGBoost-3.4%2B-189AB4?style=flat-square" alt="XGBoost 3.4+" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22C55E?style=flat-square" alt="MIT License" /></a>
   <a href="https://github.com/vortezwohl/Voice2Gender/stargazers"><img src="https://img.shields.io/github/stars/vortezwohl/Voice2Gender?style=flat-square&label=Stars" alt="GitHub stars" /></a>
@@ -15,6 +15,7 @@
 
 <p>
   <a href="#quick-start">Quick start</a> &middot;
+  <a href="#installation">Installation</a> &middot;
   <a href="#api">API</a> &middot;
   <a href="#how-it-works">How it works</a> &middot;
   <a href="#training-and-reproduction">Training</a> &middot;
@@ -53,30 +54,26 @@ You get class probabilities, a compact confidence score, and (optionally) the ex
 | Inspectable output | Pass `include_features=True` to include all model inputs in the result. |
 | Re-trainable experiment | `experiment/train.py` rebuilds the XGBoost model from the feature CSV and writes metrics and feature-importance artifacts. |
 
+## Installation
+
+Voice2Gender supports Python 3.10 and newer. Install the published package directly into your application environment. [`uv`](https://docs.astral.sh/uv/) is recommended for fast, reproducible dependency management:
+
+```bash
+uv add -U voice2gender
+```
+
+If you prefer pip:
+
+```bash
+pip install -U voice2gender
+```
+
+The user installation contains the inference package and bundled model. You do not need to clone this repository or install the development extra to call `voice2gender.predict`.
+
+> [!TIP]
+> Starting a new project? Run `uv add -U voice2gender`. It records the dependency in `pyproject.toml` and keeps the environment in sync for you.
+
 ## Quick start
-
-### Install
-
-The project targets Python 3.13 or newer. [`uv`](https://docs.astral.sh/uv/) is the recommended environment manager:
-
-```bash
-git clone https://github.com/vortezwohl/Voice2Gender.git
-cd Voice2Gender
-uv sync
-```
-
-With pip, install the project in an existing Python 3.13+ environment:
-
-```bash
-python -m pip install .
-```
-
-Install optional development and microphone dependencies for training, linting, or the live demo:
-
-```bash
-uv sync --extra dev
-# or: python -m pip install ".[dev]"
-```
 
 ### Predict from a WAV file
 
@@ -201,6 +198,18 @@ Press Enter at each prompt to accept the defaults. Artifacts are written to `exp
 ### Dataset
 
 Training data comes from the [Voice Gender dataset on Kaggle](https://www.kaggle.com/datasets/primaryobjects/voicegender), originally published by Primary Objects. Review Kaggle's current dataset terms and attribution requirements before redistributing the data or a model trained from it. The repository copy is used for reproducible experiments; it is not a claim that the dataset represents every speaker or demographic group.
+
+## Development
+
+To work on the repository, run experiments, lint the code, or try the microphone demo:
+
+```bash
+git clone https://github.com/vortezwohl/Voice2Gender.git
+cd Voice2Gender
+uv sync --extra dev
+```
+
+The `dev` extra provides the optional training, linting, and microphone dependencies.
 
 ## Repository layout
 
