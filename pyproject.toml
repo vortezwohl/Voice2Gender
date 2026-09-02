@@ -1,7 +1,7 @@
 [project]
 name = "voice2gender"
 version = "0.1.0"
-description = "Add your description here"
+description = "Extract 20 acoustic features and run a bundled XGBoost model with one Python call."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
