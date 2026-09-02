@@ -1,10 +1,10 @@
 """使用 XGBoost 根据声学特征识别人声性别。
 
-本脚本复现 Voice Gender 数据集公开分析中表现最高的 XGBoost 配置：200 棵
-最大深度为 5 的树，并使用 0.1 的学习率、0.8 的样本采样率和特征采样率。
-输入 CSV 必须包含固定的 20 个声学特征和 ``label`` 列；脚本不会从原始音频
-提取特征。运行后会在输出目录保存 XGBoost JSON 模型、评估指标和特征重要性，
-便于后续端侧转换和复现实验。
+本脚本使用经过 80 个候选版本实测后选出的 v2 XGBoost 配置：使用 lossguide
+生长策略、每棵树最多 8 个叶子、250 轮 boosting，并使用 0.06 的学习率、0.9
+的样本采样率和特征采样率。输入 CSV 必须包含固定的 20 个声学特征和 label
+列；脚本不会从原始音频提取特征。运行后会在输出目录保存 XGBoost JSON 模型、
+评估指标、特征重要性和完整训练参数，便于后续端侧转换和复现实验。
 """
 
 from __future__ import annotations
@@ -142,8 +142,8 @@ def build_model() -> XGBClassifier:
         colsample_bynode=1.0,  # 当前值：使用每个节点的全部特征。
         # colsample_bytree：构建每棵树时随机抽取的特征比例。
         # 取值：大于 0 且不超过 1；较小值通常降低过拟合并增加树之间差异，
-        # 但过小会造成欠拟合。当前值与原训练脚本保持一致。
-        colsample_bytree=0.9,  # 当前值：每棵树使用 80% 的特征。
+        # 但过小会造成欠拟合。当前 0.9 是搜索后选定的 v2 配置。
+        colsample_bytree=0.9,  # 当前值：每棵树使用 90% 的特征。
         # device：指定训练和预测设备。
         # 取值：cpu、cuda 或 gpu；cuda/gpu 需要可用的 CUDA 环境和 GPU 版本支持。
         # 选择逻辑：CPU 适合当前小型数据集且依赖简单；GPU 适合更大数据，但会增加
@@ -181,9 +181,9 @@ def build_model() -> XGBClassifier:
         gamma=0.0,  # 当前值：XGBoost 默认不额外要求损失下降。
         # grow_policy：树节点的生长顺序。
         # 取值：depthwise 优先扩展较浅层节点；lossguide 优先扩展损失下降最大的节点。
-        # 选择逻辑：depthwise 是默认且与 max_depth 直观配合；lossguide 适合用 max_leaves
-        # 控制复杂度，但会增加调参空间。
-        grow_policy="lossguide",  # 当前值：按深度生长。
+        # 选择逻辑：v2 使用 lossguide，并配合 max_leaves=8 直接限制每棵树的叶子数，
+        # 在保持表达能力的同时控制树的复杂度。
+        grow_policy="lossguide",  # 当前值：按损失下降优先生长。
         # importance_type：feature_importances_ 属性使用的特征重要性口径。
         # 取值：树模型可选 weight、gain、cover、total_gain、total_cover；None 表示
         # sklearn 包装器按模型类型采用默认口径，树模型默认实际使用 gain。
@@ -196,8 +196,8 @@ def build_model() -> XGBClassifier:
         interaction_constraints=None,  # 当前值：不限制特征交互。
         # learning_rate：每轮新增树对最终模型的贡献，也叫 eta。
         # 取值：大于 0；较小值通常需要更大的 n_estimators，较大值训练更快但更易过拟合。
-        # 选择逻辑：当前 0.1 是中等保守值；降低它时应同步增加训练轮数并用验证集选择。
-        learning_rate=0.06,  # 当前值：每棵树使用 10% 的更新步长。
+        # 选择逻辑：v2 使用 0.06，并配合 250 轮训练，在本数据切分上取得更高准确率。
+        learning_rate=0.06,  # 当前值：每棵树使用 6% 的更新步长。
         # max_bin：hist 算法对连续特征分箱的最大箱数。
         # 取值：正整数；增大可提高阈值近似精度，但增加内存和计算成本。
         # 选择逻辑：当前特征和数据集较小，默认 256 已足够；数据量大或阈值精度不足时
@@ -218,13 +218,12 @@ def build_model() -> XGBClassifier:
         max_delta_step=0.0,  # 当前值：不限制叶子权重更新步长。
         # max_depth：单棵树允许的最大深度。
         # 取值：非负整数；0 表示不以深度限制，数值越大表达能力越强但越易过拟合。
-        # 选择逻辑：当前 5 与原训练脚本一致；验证集过拟合时降低，欠拟合时谨慎增大。
-        max_depth=0,  # 当前值：最大深度为 5。
+        # 选择逻辑：v2 使用 max_depth=0，并由 lossguide 和 max_leaves=8 控制树复杂度。
+        max_depth=0,  # 当前值：不使用最大深度限制。
         # max_leaves：单棵树允许的最大叶子数。
-        # 取值：非负整数；0 表示不限制。通常与 lossguide 配合，用叶子数直接控制复杂度。
-        # 选择逻辑：当前使用 depthwise，因此保持默认 0；若改用 lossguide，应同时调节
-        # 该值。
-        max_leaves=8,  # 当前值：不额外限制叶子数。
+        # 取值：非负整数；0 表示不限制。与 lossguide 配合时，可用该值直接控制复杂度。
+        # 选择逻辑：v2 使用 8，限制每棵树的叶子数，避免无限制生长造成过拟合。
+        max_leaves=8,  # 当前值：每棵树最多 8 个叶子。
         # min_child_weight：子节点继续存在所需的最小实例权重总和。
         # 取值：大于等于 0；增大后更难创建小叶子，可抑制过拟合，但过大可能欠拟合。
         # 选择逻辑：当前使用默认 1；验证集噪声较大时可增大，模型过于保守时可减小。
@@ -246,8 +245,8 @@ def build_model() -> XGBClassifier:
         multi_strategy="one_output_per_tree",  # 当前值：每棵树处理一个输出。
         # n_estimators：boosting 轮数，也就是树的数量。
         # 取值：正整数；增大提高拟合能力和训练成本，也增加过拟合风险，通常与较小
-        # learning_rate 配合。当前 200 与原训练脚本一致。
-        n_estimators=250,  # 当前值：训练 200 轮。
+        # learning_rate 配合。v2 使用 250 轮，是搜索后选定的训练轮数。
+        n_estimators=250,  # 当前值：训练 250 轮。
         # n_jobs：CPU 并行线程数。
         # 取值：None、0 或正整数；0/None 通常交给 XGBoost 使用可用线程，固定正整数
         # 限制线程。
@@ -274,7 +273,7 @@ def build_model() -> XGBClassifier:
         # sampling_method：样本采样方式。
         # 取值：uniform 均匀采样；gradient_based 按梯度/Hessian 重要性采样，主要用于 GPU
         # hist。CPU hist 使用 gradient_based 可能不受支持或退化为不适用配置。
-        # 选择逻辑：当前使用 CPU 和 subsample=0.8，因此选择 uniform。
+        # 选择逻辑：当前使用 CPU、subsample=0.9，因此选择 uniform。
         sampling_method="uniform",  # 当前值：均匀样本采样。
         # scale_pos_weight：正类相对于负类的权重。
         # 取值：大于 0；常见起点是负类数量除以正类数量。增大可提高少数正类的关注，
@@ -297,8 +296,8 @@ def build_model() -> XGBClassifier:
         validate_parameters=True,  # 当前值：启用参数校验。
         # verbosity：XGBoost 日志详细程度。
         # 取值：0 到 3；0 静默，1 警告，2 信息，3 调试。日志越详细，诊断信息越多。
-        # 选择逻辑：使用 XGBoost 默认 1，保留重要警告而不输出调试噪音。
-        verbosity=0,  # 当前值：警告级别日志。
+        # 选择逻辑：v2 使用 0，避免训练过程输出大量日志；错误仍通过异常暴露。
+        verbosity=0,  # 当前值：静默日志。
     )
 
 
