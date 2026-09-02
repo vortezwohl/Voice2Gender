@@ -15,4 +15,5 @@ dev = [
     "pandas",
     "scikit-learn",
     "ruff",
+    "miniaudio>=1.71",
 ]
