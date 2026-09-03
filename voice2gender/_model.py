@@ -1,3 +1,9 @@
+"""Load the feature schema and bundled XGBoost model.
+
+This module owns the fixed feature-name order required by the serialized model
+and initializes the module-level booster used during prediction.
+"""
+
 import json
 from xgboost import Booster
 

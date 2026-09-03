@@ -1,4 +1,8 @@
-"""Convert int16 PCM sequences into features required by the gender model."""
+"""Extract acoustic features from PCM audio for gender-model inference.
+
+The module keeps 44,100 Hz as the default sample rate while allowing callers to
+provide any other positive integer rate explicitly.
+"""
 
 from __future__ import annotations
 
@@ -26,7 +30,9 @@ def _decode_pcm_sequence(pcm_sequence: Sequence[bytes], sample_rate: int) -> np.
 
     Args:
         pcm_sequence: Mono PCM byte chunks ordered by time.
-        sample_rate: PCM sample rate, used only for validation.
+        sample_rate: Positive integer PCM sample rate in Hz. It is validated
+            here and then used by downstream frequency calculations; it may
+            differ from :data:`SAMPLE_RATE`.
 
     Returns:
         A float64 mono sample array.
@@ -39,10 +45,12 @@ def _decode_pcm_sequence(pcm_sequence: Sequence[bytes], sample_rate: int) -> np.
         pcm_sequence, Sequence
     ):
         raise TypeError("pcm_sequence must be an ordered sequence of bytes")
-    if sample_rate != SAMPLE_RATE:
-        raise ValueError(
-            f"This model supports {SAMPLE_RATE} Hz PCM, got {sample_rate} Hz"
-        )
+    if (
+        isinstance(sample_rate, bool)
+        or not isinstance(sample_rate, (int, np.integer))
+        or sample_rate <= 0
+    ):
+        raise ValueError("sample_rate must be a positive integer")
     if not pcm_sequence:
         raise ValueError("pcm_sequence cannot be empty")
     if any(not isinstance(chunk, bytes) for chunk in pcm_sequence):
@@ -108,7 +116,7 @@ def _spectrum_features(samples: np.ndarray, sample_rate: int) -> dict[str, float
 
     Args:
         samples: Original normalized mono PCM samples; threshold gating is not applied.
-        sample_rate: Sample rate, fixed at 44.1 kHz by default.
+        sample_rate: Caller-selected PCM sample rate in Hz.
 
     Returns:
         Twelve spectral features matching voice.csv names and units; frequencies are in kHz.
@@ -169,6 +177,14 @@ def _spectrum_features(samples: np.ndarray, sample_rate: int) -> dict[str, float
     )
 
     def quantile_frequency(level: float) -> float:
+        """Return the first frequency whose cumulative energy reaches a quantile.
+
+        Args:
+            level: Cumulative-energy quantile between zero and one.
+
+        Returns:
+            The corresponding frequency in Hz.
+        """
         index = int(np.searchsorted(cumulative, level, side="right"))
         index = min(index, frequencies_hz.size - 1)
         return float(frequencies_hz[index])
@@ -200,7 +216,7 @@ def _track_f0_and_dominant(
 
     Args:
         samples: Normalized mono samples.
-        sample_rate: Sample rate, fixed at 44.1 kHz by default.
+        sample_rate: Caller-selected PCM sample rate in Hz.
 
     Returns:
         Two Hz sequences for valid F0 frames and dominant-frequency frames.
@@ -208,7 +224,7 @@ def _track_f0_and_dominant(
     Raises:
         ValueError: No valid voiced or spectral frames are available.
     """
-    # afilter(threshold=5) gates at 5% of the whole-signal peak for fund and dfreq.
+    # Apply the same 5% whole-signal peak gate used by the reference pipeline.
     threshold = float(np.max(np.abs(samples))) * ENERGY_THRESHOLD_RATIO
     filtered = np.where(np.abs(samples) <= threshold, 0.0, samples)
 
@@ -268,7 +284,15 @@ def _track_f0_and_dominant(
 
 
 def _dominant_features(dominant_hz: np.ndarray) -> dict[str, float]:
-    """Aggregate dominant-frequency statistics and compute the modulation index."""
+    """Aggregate dominant-frequency statistics and calculate modulation.
+
+    Args:
+        dominant_hz: One-dimensional array of dominant-frequency values in Hz.
+
+    Returns:
+        Dominant-frequency statistics in kHz and the dimensionless modulation
+        index expected by the model.
+    """
     dominant_khz = dominant_hz / 1000.0
     minimum = float(np.min(dominant_khz))
     maximum = float(np.max(dominant_khz))
@@ -289,7 +313,14 @@ def _dominant_features(dominant_hz: np.ndarray) -> dict[str, float]:
 
 
 def _fundamental_features(f0_hz: np.ndarray) -> dict[str, float]:
-    """Aggregate fundamental-frequency statistics and output them in kHz for voice.csv."""
+    """Aggregate F0 statistics and express the result in kHz.
+
+    Args:
+        f0_hz: One-dimensional array of valid fundamental-frequency values in Hz.
+
+    Returns:
+        Mean, minimum, and maximum F0 values in kHz using the model feature names.
+    """
     f0_khz = f0_hz / 1000.0
     return {
         "meanfun": float(np.mean(f0_khz)),
@@ -305,7 +336,8 @@ def extract_features_from_pcm_sequence(
 
     Args:
         pcm_sequence: Consecutive mono int16 little-endian PCM chunks from one speaker.
-        sample_rate: PCM sample rate; the default processing rate is 44,100 Hz.
+        sample_rate: PCM sample rate in Hz; defaults to 44,100 Hz but is not
+            restricted to that value.
 
     Returns:
         A dictionary of 20 finite floating-point features keyed by fixed feature names, ready for
