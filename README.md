@@ -1,6 +1,6 @@
 <div align="center">
 
-# *Voice2Gender*
+# Voice2Gender
 
 **A tiny, local-first voice gender classifier for raw PCM audio.**
 
